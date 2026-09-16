@@ -1095,6 +1095,7 @@ function mMenu(){
     <div style="height:14px"></div>
     <label>phone sync</label>
     <input class="fld" id="f_tok" type="password" placeholder="github token" value="${esc(getSync().token||'')}" autocomplete="off">
+    <div class="mini" id="f_tokhint" style="margin-top:4px;min-height:14px"></div>
     <input class="fld" id="f_pass" type="password" placeholder="passphrase" value="${esc(getSync().pass||'')}" autocomplete="off" style="margin-top:6px">
     <div class="mini" id="f_smsg" style="margin-top:6px;min-height:14px">${esc($('#syncmsg').textContent)}</div>
     <button class="menuitem" id="m_syncnow">${ico('up',14)} sync now</button>
@@ -1140,7 +1141,11 @@ function mMenu(){
     if(S.themes.some(t=>t.bg.toLowerCase()===curBg().toLowerCase()&&t.accent.toLowerCase()===curAc().toLowerCase())) return;
     S.themes.push({id:uid(),bg:curBg(),accent:curAc()}); save(); mMenu();
   };
-  modal.querySelector('#f_tok').addEventListener('input',ev=>setSync({token:ev.target.value.trim()}));
+  const tokHint=()=>{ const v=(modal.querySelector('#f_tok').value||'').trim(), el=modal.querySelector('#f_tokhint');
+    el.textContent=!v?'':v.indexOf('github_pat_')===0?`fine-grained token, ${v.length} chars — looks right`
+      :v.indexOf('ghp_')===0?'classic token — will work only if it has the repo scope'
+      :`this isn’t a github token (starts with “${v.slice(0,6)}…”) — it should start with github_pat_`; };
+  modal.querySelector('#f_tok').addEventListener('input',ev=>{ setSync({token:ev.target.value.trim()}); tokHint(); }); tokHint();
   modal.querySelector('#f_pass').addEventListener('input',ev=>setSync({pass:ev.target.value}));
   modal.querySelector('#m_syncnow').onclick=()=>pushSync();
   modal.querySelector('#m_exp').onclick=()=>{ const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
