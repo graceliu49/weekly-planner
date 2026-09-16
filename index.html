@@ -974,6 +974,7 @@ let syncTimer=null, syncBusy=false, syncDirty=false, lastPull=0;
 const isDirty=()=>{ try{ return localStorage.getItem('gpDirty')==='1'; }catch(e){ return false; } };
 const clearDirty=()=>{ try{ localStorage.removeItem('gpDirty'); }catch(e){} };
 let pushPending=false;
+const itemCount=st=>['classes','assignments','events','meals','todos','packages','shop'].reduce((n,k)=>n+(((st||{})[k])||[]).length,0);
 function scheduleSync(){ const c=getSync(); if(!c.token||!c.pass) return; pushPending=true; clearTimeout(syncTimer); syncTimer=setTimeout(pushSync,3000); }
 async function pushSync(){
   const c=getSync();
@@ -987,6 +988,7 @@ async function pushSync(){
     const url=`https://api.github.com/repos/${REPO}/contents/data.json`;
     const h={Authorization:'Bearer '+c.token,Accept:'application/vnd.github+json','Content-Type':'application/json'};
     let sha; const g=await fetch(url,{headers:h,cache:'no-store'}); if(g.ok) sha=(await g.json()).sha;
+    if(sha&&itemCount(S)===0){ syncBusy=false; clearDirty(); setSyncMsg('this device is empty — pulling instead'); pullSync(true); return; }
     const body={message:'sync '+new Date().toISOString(),content:btoa(blob)}; if(sha) body.sha=sha;
     const r=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify(body)});
     if(!r.ok){ let m=''; try{ m=(await r.json()).message||''; }catch(x){} throw new Error('HTTP '+r.status+(m?' — '+m:'')); }
@@ -1006,7 +1008,7 @@ async function pushSync(){
 async function pullSync(manual){
   const c=getSync();
   if(!c.pass){ if(manual) mSyncSheet(); return; }
-  if(pushPending||syncBusy||isDirty()){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
+  if((pushPending||syncBusy||isDirty())&&itemCount(S)>0){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
   if(veil.classList.contains('open')&&!manual) return;                         // never yank state mid-edit
   setSyncMsg('updating…');
   try{
@@ -1015,6 +1017,7 @@ async function pullSync(manual){
     const j=await r.json(), plain=await decryptStr(atob(j.content.replace(/\n/g,'')),c.pass);
     const remote=JSON.parse(plain);
     lastPull=Date.now();
+    if(itemCount(remote)===0&&itemCount(S)>0){ setSyncMsg('synced copy was empty — keeping this one'); if(c.token){ pushPending=true; pushSync(); } return; }
     if(remote._t&&S._t&&remote._t<=S._t){ setSyncMsg('up to date'); return; }
     S=Object.assign(blank(),remote); ensureThemes(); persist();
     applyTheme(); render(); setSyncMsg('updated '+nowLbl());
