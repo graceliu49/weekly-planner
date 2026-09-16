@@ -6,7 +6,7 @@
 <title>my week</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="my week">
 <meta name="theme-color" content="#FCEAF4">
 <link rel="apple-touch-icon" href="icon.png">
@@ -222,10 +222,14 @@ body.mobile .ev{font-size:14px;padding:6px 9px;border-radius:12px}
 body.mobile .ev .s{font-size:12px}
 body.mobile .ev .n{font-size:12px}
 body.mobile .ev .rz,body.mobile .ev .rzt{display:none}
-body.mobile .ev{cursor:pointer}
-body.mobile .iconbtn,body.mobile .cardadd,body.mobile .addrow,body.mobile #hidecls{display:none}
-body.mobile .cbx{pointer-events:none}
+body.mobile .col{touch-action:pan-y}
 body.mobile .row[data-dragkind]{cursor:default}
+body.mobile .iconbtn{width:30px;height:30px}
+body.mobile .cbx{width:22px;height:22px}
+body.mobile #msync{display:grid}
+body.mobile #today{display:inline-block;padding:6px 10px;font-size:12px}
+body.mobile #syncmsg{display:none}
+#msync{display:none}
 body.mobile .row .txt{font-size:14px}
 body.mobile .card{border-radius:16px}
 body.mobile #app{padding-bottom:calc(56px + env(safe-area-inset-bottom))}
@@ -259,6 +263,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
     <button class="chipbtn c-asgn" data-quick="assignment">+ assignment</button>
     <button class="chipbtn c-class" data-quick="class">+ class</button>
     <span id="syncmsg"></span>
+    <button class="nav" id="msync" title="sync"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-14.2 5M4 12a8 8 0 0 1 14.2-5M18 3v4h-4M6 21v-4h4"/></svg></button>
     <button class="chipbtn c-ghost" id="io">⋯</button>
   </header>
 
@@ -348,7 +353,6 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <nav class="mtabs">
   <button data-page="day" class="on"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16v13H4zM4 10.5h16M8 3.5v4M16 3.5v4"/></svg>day</button>
   <button data-page="lists"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>lists</button>
-  <button id="msync"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-14.2 5M4 12a8 8 0 0 1 14.2-5M18 3v4h-4M6 21v-4h4"/></svg>sync</button>
 </nav>
 <div class="veil" id="veil"><div class="modal" id="modal"></div></div>
 
@@ -449,8 +453,9 @@ function snapshot(raw){
 snapshot(RAW);
 { const B=blank(); for(const k in B) if(S[k]==null) S[k]=B[k]; }
 let saveWarned=false;
-function save(){ if(MOBILE) return; scheduleSync(); try{ localStorage.setItem('gracePlanner',JSON.stringify(S)); }
+function persist(){ try{ localStorage.setItem('gracePlanner',JSON.stringify(S)); }
   catch(e){ if(!saveWarned){saveWarned=true;alert('this browser blocked local saving, so changes won’t persist.');} } }
+function save(){ persist(); try{ localStorage.setItem('gpDirty','1'); }catch(e){} scheduleSync(); }
 
 const weekDays=()=>Array.from({length:7},(_,i)=>addDays(anchor,i));
 const weekKey=()=>fmt(anchor);
@@ -966,14 +971,18 @@ async function decryptStr(blob,pass){
 }
 const nowLbl=()=>{ const d=new Date(); return h12(fromMin(d.getHours()*60+d.getMinutes())); };
 let syncTimer=null, syncBusy=false, syncDirty=false, lastPull=0;
-function scheduleSync(){ if(MOBILE) return; const c=getSync(); if(!c.token||!c.pass) return; clearTimeout(syncTimer); syncTimer=setTimeout(pushSync,3000); }
+const isDirty=()=>{ try{ return localStorage.getItem('gpDirty')==='1'; }catch(e){ return false; } };
+const clearDirty=()=>{ try{ localStorage.removeItem('gpDirty'); }catch(e){} };
+let pushPending=false;
+function scheduleSync(){ const c=getSync(); if(!c.token||!c.pass) return; pushPending=true; clearTimeout(syncTimer); syncTimer=setTimeout(pushSync,3000); }
 async function pushSync(){
   const c=getSync();
   if(!c.token||!c.pass){ setSyncMsg('sync not set up'); return; }
   if(!(typeof crypto!=='undefined'&&crypto.subtle)){ setSyncMsg('encryption unavailable here'); return; }
   if(syncBusy){ syncDirty=true; return; }
-  syncBusy=true; setSyncMsg('syncing…');
+  syncBusy=true; pushPending=false; setSyncMsg('syncing…');
   try{
+    S._t=Date.now();
     const blob=await encryptStr(JSON.stringify(S),c.pass);
     const url=`https://api.github.com/repos/${REPO}/contents/data.json`;
     const h={Authorization:'Bearer '+c.token,Accept:'application/vnd.github+json','Content-Type':'application/json'};
@@ -981,9 +990,11 @@ async function pushSync(){
     const body={message:'sync '+new Date().toISOString(),content:btoa(blob)}; if(sha) body.sha=sha;
     const r=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify(body)});
     if(!r.ok){ let m=''; try{ m=(await r.json()).message||''; }catch(x){} throw new Error('HTTP '+r.status+(m?' — '+m:'')); }
-    setSyncMsg('synced '+nowLbl());
+    clearDirty(); persist(); setSyncMsg('synced '+nowLbl());
   }catch(e){
     const m=e.message||'';
+    pushPending=true;
+    if(/Failed to fetch|NetworkError|409/.test(m)){ clearTimeout(syncTimer); syncTimer=setTimeout(pushSync,30000); }
     setSyncMsg(/401/.test(m)?'token rejected (bad credentials) — re-copy it':
       /403/.test(m)?'token can\'t write — set Contents to Read and write':
       /404/.test(m)?'token can\'t see the repo — pick weekly-planner under repository access':
@@ -992,48 +1003,33 @@ async function pushSync(){
   syncBusy=false;
   if(syncDirty){ syncDirty=false; scheduleSync(); }
 }
-async function pullSync(){
+async function pullSync(manual){
   const c=getSync();
-  if(!c.pass){ mSyncSheet(); return; }
+  if(!c.pass){ if(manual) mSyncSheet(); return; }
+  if(pushPending||syncBusy||isDirty()){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
+  if(veil.classList.contains('open')&&!manual) return;                         // never yank state mid-edit
   setSyncMsg('updating…');
   try{
     const r=await fetch(`https://api.github.com/repos/${REPO}/contents/data.json?_=${Date.now()}`,{headers:{Accept:'application/vnd.github+json'},cache:'no-store'});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const j=await r.json(), plain=await decryptStr(atob(j.content.replace(/\n/g,'')),c.pass);
-    S=Object.assign(blank(),JSON.parse(plain)); ensureThemes();
-    try{ localStorage.setItem('gpCache',plain); }catch(e){}
-    lastPull=Date.now(); applyTheme(); render(); setSyncMsg('updated '+nowLbl());
+    const remote=JSON.parse(plain);
+    lastPull=Date.now();
+    if(remote._t&&S._t&&remote._t<=S._t){ setSyncMsg('up to date'); return; }
+    S=Object.assign(blank(),remote); ensureThemes(); persist();
+    applyTheme(); render(); setSyncMsg('updated '+nowLbl());
   }catch(e){ setSyncMsg(e.name==='OperationError'?'wrong passphrase':/404/.test(e.message)?'nothing synced yet':'offline'); }
 }
 function mSyncSheet(){
   const c=getSync();
   open(`<h2>sync</h2>
     <label>passphrase</label><input class="fld" id="f_pass" type="password" value="${esc(c.pass||'')}" autocomplete="off">
+    <label>github token</label><input class="fld" id="f_tok" type="password" value="${esc(c.token||'')}" autocomplete="off">
     <div class="mini" id="f_smsg" style="margin-top:8px;min-height:14px">${esc($('#syncmsg').textContent)}</div>
     <div class="acts"><button class="btn g" id="f_x">close</button><button class="btn p" id="f_ok">update now</button></div>`,
-  ()=>{ setSync({pass:V('f_pass')}); close(); pullSync(); });
+  ()=>{ setSync({pass:V('f_pass'),token:V('f_tok')}); close(); if(isDirty()&&getSync().token) pushSync(); else pullSync(true); });
 }
 $('#msync').onclick=mSyncSheet;
-
-/* ============ read-only detail (phone) ============ */
-function mDetail(kind,key){
-  const line=(t)=>`<div class="mini" style="margin-top:4px">${t}</div>`;
-  const notes=(n)=>n?`<div style="margin-top:12px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(n)}</div>`:'';
-  let h='';
-  if(kind==='event'){ const e=S.events.find(x=>x.id===key); if(!e) return;
-    const a=e.asgn?S.assignments.find(x=>x.id===e.asgn):null, t=e.todo?S.todos.find(x=>x.id===e.todo):null, k=a?cls(a.classId):null;
-    h=`<h2>${esc(e.title)}</h2>`+line(`${h12(e.start)}–${h12(e.end)}${e.who?' · '+esc(e.who):''}${e.loc?' · '+esc(e.loc):''}`)
-      +(a?line(`${esc(a.title)}${k?' · '+esc(k.name):''}${a.due?' · due '+a.due:''}`):'')+(t?line('to-do · '+esc(t.text)):'')+notes(e.notes); }
-  else if(kind==='class'){ const p=key.split('|'), c=cls(p[0]); if(!c) return; const m=c.meetings[+p[1]]||{};
-    h=`<h2>${esc(c.name)}</h2>`+line(`${h12(m.start||'0:00')}–${h12(m.end||'0:00')}${m.loc?' · '+esc(m.loc):''}`); }
-  else if(kind==='meal'){ const m=S.meals.find(x=>x.id===key); if(!m) return;
-    h=`<h2>${m.slot}</h2>`+line([m.who?esc(m.who):'',m.place?esc(m.place):'',m.time?h12(m.time):''].filter(Boolean).join(' · '))+notes(m.notes); }
-  else if(kind==='asgn'){ const a=S.assignments.find(x=>x.id===key); if(!a) return; const k=cls(a.classId), left=leftFor(a);
-    h=`<h2>${a.star?icoF('star',16,2)+' ':''}${esc(a.title)}</h2>`+line([k?esc(k.name):'',a.due?'due '+a.due+(a.dueTime?' '+h12(a.dueTime):''):'',
-      +a.est?(left?HM(left)+' left of '+a.est+'h':'all '+a.est+'h blocked'):''].filter(Boolean).join(' · '))+notes(a.notes); }
-  if(!h) return;
-  open(h+`<div class="acts"><button class="btn p" id="f_x">close</button></div>`,null);
-}
 
 /* ============ package modal ============ */
 function mPkg(p0){
@@ -1217,11 +1213,6 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-sdone],[data-sedit],[data-sdel],[data-spkg],[data-sclear],.tab[data-sf],[data-pedit],.tab[data-pf],[data-td],[data-tblock],[data-tdnext],[data-tddel],[data-adone],[data-ablock],[data-aedit],[data-cedit],[data-meal],[data-asgn],[data-eedit],.tab[data-af]');
   if(!t) return;
   const d=t.dataset;
-  if(MOBILE&&d.af==null&&d.pf==null&&d.sf==null){
-    if(d.asgn) mDetail('asgn',d.asgn);
-    else if(d.meal){ const p=d.meal.split('|'); const m=S.meals.find(x=>x.date===p[0]&&x.slot===p[1]); if(m) mDetail('meal',m.id); }
-    return;
-  }
   if(d.af!=null){ asgnFilter=d.af; $$('.tab[data-af]').forEach(x=>x.classList.toggle('on',x===t)); renderSide(); return; }
   if(d.pf!=null){ pkgFilter=d.pf; $$('.tab[data-pf]').forEach(x=>x.classList.toggle('on',x===t)); renderSide(); return; }
   if(d.pedit){ mPkg(Object.assign({},(S.packages||[]).find(y=>y.id===d.pedit))); return; }
@@ -1269,7 +1260,7 @@ grid.addEventListener('pointerdown',e=>{
   if(e.button!==0||veil.classList.contains('open')) return;
   const col=e.target.closest('.col'); if(!col) return;
   const ev=e.target.closest('.ev');
-  if(MOBILE){ if(ev) mDetail(ev.dataset.kind,ev.dataset.key); return; }
+  if(MOBILE){ mtap={x:e.clientX,y:e.clientY,t:Date.now(),ev:ev?{kind:ev.dataset.kind,key:ev.dataset.key}:null,col}; return; }
   if(ev){
     if(ev.classList.contains('locked')) return;
     const mode=e.target.classList.contains('rz')?'resize':e.target.classList.contains('rzt')?'resizetop':'move';
@@ -1317,7 +1308,18 @@ grid.addEventListener('pointermove',e=>{
     el.style.transform=`translateX(${drag.dc*colW()}px)`;
   }
 });
+let mtap=null;
 grid.addEventListener('pointerup',e=>{
+  if(MOBILE){
+    const m=mtap; mtap=null; if(!m) return;
+    if(Math.abs(e.clientX-m.x)>10||Math.abs(e.clientY-m.y)>10||Date.now()-m.t>600) return;
+    if(m.ev){ openItem(m.ev.kind,m.ev.key); return; }
+    const di=+m.col.dataset.day; if(!(di>=0&&di<=6)) return;
+    const y=e.clientY-m.col.getBoundingClientRect().top;
+    const st=clamp(snap(START+y/PPM),START,END-60);
+    mEvent({date:fmt(addDays(anchor,di)),start:fromMin(st),end:fromMin(st+60)});
+    return;
+  }
   if(!drag) return; const d=drag; drag=null;
   if(d.mode==='create'){
     d.ghost.remove();
@@ -1396,7 +1398,7 @@ window.addEventListener('pointerup',e=>{
   S.events.push(ev); save(); render();
 });
 window.addEventListener('pointercancel',()=>{ if(endSideDrag()) swallowClick=true; });
-grid.addEventListener('pointercancel',()=>{ if(drag){ if(drag.ghost)drag.ghost.remove(); if(drag.el)drag.el.classList.remove('dragging'); drag=null; render(); } });
+grid.addEventListener('pointercancel',()=>{ mtap=null; if(drag){ if(drag.ghost)drag.ghost.remove(); if(drag.el)drag.el.classList.remove('dragging'); drag=null; render(); } });
 
 function commit(kind,key,s,e,dayIdx){
   const ds=fmt(addDays(anchor,dayIdx));
@@ -1459,19 +1461,17 @@ if(S.cv4!==1){
 { const n=S.events.length;
   S.events=S.events.filter(e=>/^\d{4}-\d{2}-\d{2}$/.test(e.date||''));
   if(S.events.length!==n) save(); }
-if(MOBILE){
-  try{ const c=localStorage.getItem('gpCache'); if(c) S=Object.assign(blank(),JSON.parse(c)); }catch(e){}
-  ensureThemes();
-}
 applyTheme();
 fitHours();
 render();
-if(MOBILE){
-  if(getSync().pass) pullSync(); else setTimeout(mSyncSheet,300);
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-lastPull>60000&&getSync().pass) pullSync(); });
-  setInterval(()=>{ if(!document.hidden&&getSync().pass) pullSync(); },300000);
-}else{
-  const c=getSync(); if(c.token&&c.pass) setSyncMsg('sync on');
+{
+  const c=getSync();
+  if(c.pass){ pullSync(); }
+  else if(MOBILE) setTimeout(mSyncSheet,300);
+  const maybePull=()=>{ if(!document.hidden&&getSync().pass&&Date.now()-lastPull>45000) pullSync(); };
+  document.addEventListener('visibilitychange',maybePull);
+  window.addEventListener('focus',maybePull);
+  setInterval(maybePull,120000);
 }
 scroller.scrollTop=(DAYTOP-START)*PPM;
 setInterval(renderGrid,60000);
