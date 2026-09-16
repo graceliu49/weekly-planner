@@ -1005,10 +1005,11 @@ async function pushSync(){
   syncBusy=false;
   if(syncDirty){ syncDirty=false; scheduleSync(); }
 }
-async function pullSync(manual){
+async function pullSync(manual,force){
   const c=getSync();
   if(!c.pass){ if(manual) mSyncSheet(); return; }
-  if((pushPending||syncBusy||isDirty())&&itemCount(S)>0){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
+  if(force){ clearTimeout(syncTimer); pushPending=false; clearDirty(); }
+  else if((pushPending||syncBusy||isDirty())&&itemCount(S)>0){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
   if(veil.classList.contains('open')&&!manual) return;                         // never yank state mid-edit
   setSyncMsg('updating…');
   try{
@@ -1097,7 +1098,8 @@ function mMenu(){
     <div class="mini" id="f_tokhint" style="margin-top:4px;min-height:14px"></div>
     <input class="fld" id="f_pass" type="password" placeholder="passphrase" value="${esc(getSync().pass||'')}" autocomplete="off" style="margin-top:6px">
     <div class="mini" id="f_smsg" style="margin-top:6px;min-height:14px">${esc($('#syncmsg').textContent)}</div>
-    <button class="menuitem" id="m_syncnow">${ico('up',14)} sync now</button>
+    <button class="menuitem" id="m_syncnow">${ico('up',14)} push this copy to the phone</button>
+    <button class="menuitem" id="m_pullnow">${ico('down',14)} replace this copy with the synced one</button>
     <div style="height:14px"></div>
     <button class="menuitem" id="m_exp">${ico('down',14)} export backup</button>
     <button class="menuitem" id="m_imp">${ico('up',14)} import backup</button>
@@ -1147,6 +1149,7 @@ function mMenu(){
   modal.querySelector('#f_tok').addEventListener('input',ev=>{ setSync({token:ev.target.value.trim()}); tokHint(); }); tokHint();
   modal.querySelector('#f_pass').addEventListener('input',ev=>setSync({pass:ev.target.value}));
   modal.querySelector('#m_syncnow').onclick=()=>pushSync();
+  modal.querySelector('#m_pullnow').onclick=()=>{ if(confirm('replace everything on this device with the synced copy?')){ close(); pullSync(true,true); } };
   modal.querySelector('#m_exp').onclick=()=>{ const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`planner-backup-${fmt(new Date())}.json`; a.click(); };
   modal.querySelector('#m_imp').onclick=()=>{ const i=document.createElement('input'); i.type='file'; i.accept='.json';
