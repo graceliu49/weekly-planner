@@ -980,9 +980,15 @@ async function pushSync(){
     let sha; const g=await fetch(url,{headers:h,cache:'no-store'}); if(g.ok) sha=(await g.json()).sha;
     const body={message:'sync '+new Date().toISOString(),content:btoa(blob)}; if(sha) body.sha=sha;
     const r=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify(body)});
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok){ let m=''; try{ m=(await r.json()).message||''; }catch(x){} throw new Error('HTTP '+r.status+(m?' — '+m:'')); }
     setSyncMsg('synced '+nowLbl());
-  }catch(e){ setSyncMsg('sync failed'+(/401|403/.test(e.message)?' — check token':'')); }
+  }catch(e){
+    const m=e.message||'';
+    setSyncMsg(/401/.test(m)?'token rejected (bad credentials) — re-copy it':
+      /403/.test(m)?'token can\'t write — set Contents to Read and write':
+      /404/.test(m)?'token can\'t see the repo — pick weekly-planner under repository access':
+      /Failed to fetch|NetworkError/.test(m)?'offline or blocked':'sync failed: '+m);
+  }
   syncBusy=false;
   if(syncDirty){ syncDirty=false; scheduleSync(); }
 }
