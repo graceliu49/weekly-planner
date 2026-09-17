@@ -195,7 +195,9 @@ textarea.fld{resize:vertical;min-height:52px;font-weight:500}
 .mtabs{display:none}
 #syncmsg{font-size:11px;color:var(--ink-soft);white-space:nowrap}
 #syncmsg:empty{display:none}
-body.mobile{--gutter:46px;overflow:hidden}
+body.mobile{--gutter:46px;overflow:hidden;overscroll-behavior:none;position:fixed;inset:0}
+body.mobile #app{position:fixed;inset:0;height:auto}
+body.mobile .scroll,body.mobile #side{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 body.mobile header{padding:calc(8px + env(safe-area-inset-top)) 12px 8px;gap:8px}
 body.mobile header .chipbtn,body.mobile #io,body.mobile .spacer{display:none}
 body.mobile .brand{font-size:16px}
@@ -375,6 +377,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <script>
 /* ============ mode ============ */
 const REPO='graceliu49/weekly-planner';
+const BUILD='1789603425';
 const MOBILE=(typeof location!=='undefined'&&/[?&]m=1/.test(location.search))
   ||(typeof matchMedia==='function'&&matchMedia('(max-width:720px)').matches);
 if(MOBILE&&typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.add('mobile');
@@ -1485,6 +1488,19 @@ render();
 }
 scroller.scrollTop=(DAYTOP-START)*PPM;
 setInterval(renderGrid,60000);
+if(BUILD!=='__BUILD__'&&/^https?:/.test(location.protocol)){
+  let lastChk=0;
+  const checkBuild=async()=>{
+    if(Date.now()-lastChk<120000) return; lastChk=Date.now();
+    try{
+      const t=await (await fetch(location.pathname+'?v='+Date.now(),{cache:'no-store'})).text();
+      const m=t.match(/const BUILD='(\d+)'/);
+      if(m&&m[1]!==BUILD&&+m[1]>+BUILD) location.replace(location.pathname+'?b='+m[1]);
+    }catch(e){}
+  };
+  setTimeout(checkBuild,1500);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkBuild(); });
+}
 let rzt;
 window.addEventListener('storage',e=>{
   if(e.key!=='gracePlanner'||!e.newValue) return;
