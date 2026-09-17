@@ -200,7 +200,9 @@ body.mobile header{padding:calc(8px + env(safe-area-inset-top)) 12px 8px;gap:8px
 body.mobile header .chipbtn,body.mobile #io,body.mobile .spacer{display:none}
 body.mobile .brand{font-size:16px}
 body.mobile .weekpill{margin-left:auto}
-body.mobile .weekpill b{font-size:13px;padding:0 6px}
+body.mobile .weekpill b{font-size:13.5px;padding:0 6px;white-space:nowrap}
+body.mobile .brandtxt{display:none}
+body.mobile .weekpill{flex:none}
 body.mobile main{flex-direction:column}
 body.mobile #cal{margin:8px 8px 0;border-radius:16px}
 body.mobile #side{display:none;width:auto;margin:8px;flex:1;min-height:0}
@@ -250,7 +252,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 
 <div id="app">
   <header>
-    <div class="brand">my week<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5S3.5 15 3.5 9.4A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8.5 2.4c0 5.6-8.5 11.1-8.5 11.1z"/></svg></div>
+    <div class="brand"><span class="brandtxt">my week</span><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5S3.5 15 3.5 9.4A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8.5 2.4c0 5.6-8.5 11.1-8.5 11.1z"/></svg></div>
     <div class="weekpill">
       <button class="nav" id="prev">‹</button>
       <b id="wklabel">—</b>
