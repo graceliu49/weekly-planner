@@ -381,7 +381,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <script>
 /* ============ mode ============ */
 const REPO='graceliu49/weekly-planner';
-const BUILD='1789603526';
+const BUILD='1789603947';
 const MOBILE=(typeof location!=='undefined'&&/[?&]m=1/.test(location.search))
   ||(typeof matchMedia==='function'&&matchMedia('(max-width:720px)').matches);
 if(MOBILE&&typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.add('mobile');
@@ -1495,12 +1495,17 @@ setInterval(renderGrid,60000);
 if(MOBILE&&typeof window!=='undefined'&&window.visualViewport){
   const vv=window.visualViewport, app=$('#app');
   const fit=()=>{
-    const top=Math.max(0,vv.offsetTop), h=vv.height;
+    const full=window.innerHeight||0;
+    let h=vv.height||0, top=Math.max(0,vv.offsetTop||0);
+    if(!(h>200)){ h=full; top=0; }              // standalone launch can report 0 — fall back
+    if(!(h>200)){ app.style.top=''; app.style.height=''; veil.style.top=''; veil.style.height=''; return; }
     app.style.top=top+'px'; app.style.height=h+'px';
     veil.style.top=top+'px'; veil.style.height=h+'px';
-    document.body.classList.toggle('kb',h<window.innerHeight*0.75);
+    document.body.classList.toggle('kb',full>0&&h<full*0.75);
   };
-  vv.addEventListener('resize',fit); vv.addEventListener('scroll',fit); fit();
+  vv.addEventListener('resize',fit); vv.addEventListener('scroll',fit);
+  window.addEventListener('resize',fit); window.addEventListener('orientationchange',()=>setTimeout(fit,300));
+  fit(); setTimeout(fit,400); setTimeout(fit,1500);
   document.addEventListener('focusin',e=>{ if(e.target.matches&&e.target.matches('input,textarea,select')) setTimeout(()=>{ try{ e.target.scrollIntoView({block:'center',behavior:'smooth'}); }catch(x){} },250); });
 }
 if(BUILD!=='__BUILD__'&&/^https?:/.test(location.protocol)){
