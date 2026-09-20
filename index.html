@@ -102,6 +102,10 @@ main{flex:1;display:flex;min-height:0}
 .ev .rz{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize}
 .ev .rzt{position:absolute;left:0;right:0;top:0;height:7px;cursor:ns-resize}
 .ev.locked{cursor:pointer;opacity:.94}
+.ev.theirs{opacity:.6;border:1.5px dashed currentColor;cursor:default;
+  background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.4) 0 3px,transparent 3px 9px)}
+.ev.shared{border-left:5px solid currentColor}
+#ovl{display:none} #ovl.show{display:grid} #ovl.on{background:var(--accent-soft);color:var(--ink)}
 .ev.star{border-width:2.5px;border-color:currentColor;font-weight:700;box-shadow:0 3px 0 rgba(0,0,0,.09)}
 .ev.star .s{font-weight:600;opacity:.82}
 .tag.star{border-width:2px;border-color:currentColor;font-weight:800}
@@ -273,6 +277,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
     <button class="chipbtn c-asgn" data-quick="assignment">+ assignment</button>
     <button class="chipbtn c-class" data-quick="class">+ class</button>
     <span id="syncmsg"></span>
+    <button class="nav" id="ovl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9.4 11.2a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6M2.9 20.4v-1.6a4.7 4.7 0 0 1 4.7-4.6h3.6a4.7 4.7 0 0 1 4.7 4.6v1.6M16.6 5.1a3.3 3.3 0 0 1 0 6.2M18.2 14.4a4.7 4.7 0 0 1 3 4.4v1.6"/></svg></button>
     <button class="nav" id="msync" title="sync"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-14.2 5M4 12a8 8 0 0 1 14.2-5M18 3v4h-4M6 21v-4h4"/></svg></button>
     <button class="chipbtn c-ghost" id="io">⋯</button>
   </header>
@@ -381,7 +386,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <script>
 /* ============ mode ============ */
 const REPO='graceliu49/weekly-planner';
-const BUILD='1789603947';
+const BUILD='1789943672';
 const MOBILE=(typeof location!=='undefined'&&/[?&]m=1/.test(location.search))
   ||(typeof matchMedia==='function'&&matchMedia('(max-width:720px)').matches);
 if(MOBILE&&typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.add('mobile');
@@ -463,6 +468,12 @@ function snapshot(raw){
 }
 snapshot(RAW);
 { const B=blank(); for(const k in B) if(S[k]==null) S[k]=B[k]; }
+let SH={events:[],del:{},_t:0}, TH=null, overlay=false;
+try{ SH=Object.assign({events:[],del:{},_t:0},JSON.parse(localStorage.getItem('gpShared')||'{}')); }catch(e){}
+try{ TH=JSON.parse(localStorage.getItem('gpTheirs')||'null'); }catch(e){}
+try{ overlay=localStorage.getItem('gpOverlay')==='1'; }catch(e){}
+function persistShared(){ try{ localStorage.setItem('gpShared',JSON.stringify(SH)); }catch(e){} }
+const otherName=()=>TH&&TH.name?TH.name:'';
 let saveWarned=false;
 function persist(){ try{ localStorage.setItem('gracePlanner',JSON.stringify(S)); }
   catch(e){ if(!saveWarned){saveWarned=true;alert('this browser blocked local saving, so changes won’t persist.');} } }
@@ -491,6 +502,19 @@ function dayItems(ds,dow){
     out.push({kind:'event',key:e.id,ref:e,title:e.title,icon:(TYPES[e.type]||{}).ic,notes:e.notes||'',
       sub:[link,e.who,e.loc].filter(Boolean).join(' · '),star:!!e.star,start:toMin(e.start),end:toMin(e.end),color:e.color});
   });
+  (SH.events||[]).filter(e=>e.date===ds).forEach(e=>out.push({kind:'shared',key:e.id,ref:e,title:e.title,icon:'people',shared:true,
+    notes:e.notes||'',sub:[e.who,e.loc].filter(Boolean).join(' · '),star:!!e.star,start:toMin(e.start),end:toMin(e.end),color:e.color}));
+  if(overlay&&TH&&TH.data){
+    const T=TH.data, nm=TH.name;
+    (T.classes||[]).forEach(c=>(c.meetings||[]).forEach(m=>{
+      if(!(m.days||[]).includes(dow)) return;
+      if(T.term&&T.term.start&&ds<T.term.start) return; if(T.term&&T.term.end&&ds>T.term.end) return;
+      out.push({kind:'theirs',key:'c'+c.id,title:c.name,sub:nm,start:toMin(m.start),end:toMin(m.end),color:c.color,locked:true,theirs:true}); }));
+    (T.events||[]).filter(e=>e.date===ds).forEach(e=>out.push({kind:'theirs',key:'e'+e.id,title:e.title,icon:(TYPES[e.type]||{}).ic,
+      sub:[nm,e.who].filter(Boolean).join(' · '),start:toMin(e.start),end:toMin(e.end),color:e.color,locked:true,theirs:true}));
+    (T.meals||[]).filter(m=>m.date===ds&&m.time).forEach(m=>out.push({kind:'theirs',key:'m'+m.id,title:m.who||m.slot,icon:m.slot==='lunch'?'bowl':'fork',
+      sub:nm,start:toMin(m.time),end:toMin(m.time)+(+m.dur||60),color:curBg(),locked:true,theirs:true}));
+  }
   S.meals.filter(m=>m.date===ds&&m.time).forEach(m=>out.push({kind:'meal',key:m.id,ref:m,
     title:m.who||m.slot,icon:m.slot==='lunch'?'bowl':'fork',sub:m.place||'',start:toMin(m.time),end:toMin(m.time)+(+m.dur||60),color:curBg()}));
   return out;
@@ -621,7 +645,7 @@ function renderGrid(){
       const top=(it.start-START)*PPM, hgt=Math.max(17,(it.end-it.start)*PPM-2);
       const w=100/it._n, l=it._c*w;
       const el=document.createElement('div');
-      el.className='ev'+(it.locked?' locked':'')+(hgt<40?' compact':'')+(it.star?' star':'');
+      el.className='ev'+(it.locked?' locked':'')+(hgt<40?' compact':'')+(it.star?' star':'')+(it.theirs?' theirs':'')+(it.shared?' shared':'');
       el.style.cssText=`top:${top}px;height:${hgt}px;left:calc(${l}% + 2px);width:calc(${w}% - 4px);background:${it.color};color:${ink(it.color)}`;
       el.dataset.kind=it.kind; el.dataset.key=it.key; el.dataset.day=i; el.dataset.s=it.start; el.dataset.e=it.end;
       el.innerHTML=`<div class="t">${it.star?icoF('star',11):(it.icon?ico(it.icon,11):'')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title)}</span></div>`+
@@ -822,6 +846,7 @@ function mEvent(pre){
     <div class="mini" id="f_ainfo" style="margin-top:6px;min-height:14px"></div>
     <label>color</label>${swatch(e.color)}
     <button class="startog${e.star?' on':''}" id="f_star">${ico('star',15)} important</button>
+    ${getSync().who?`<button class="startog${e._shared?' on':''}" id="f_shared" style="margin-top:8px">${ico('people',15)} shared${otherName()?' with '+esc(otherName()):''}</button>`:''}
     <label>notes</label><textarea class="fld" id="f_n">${esc(e.notes)}</textarea>
     <div class="acts">${e.id?'<button class="btn d" id="f_del">delete</button>':''}
       <button class="btn g" id="f_x">cancel</button><button class="btn p" id="f_ok">save</button></div>`,
@@ -831,8 +856,18 @@ function mEvent(pre){
       asgn:V('f_a').indexOf('a:')===0?V('f_a').slice(2):'',todo:V('f_a').indexOf('t:')===0?V('f_a').slice(2):'',notes:V('f_n'),
       star:modal.querySelector('#f_star').classList.contains('on'),color:pickedColor(e.color)};
     if(toMin(o.end)<=toMin(o.start)) o.end=fromMin(Math.min(END,toMin(o.start)+30));
-    const i=S.events.findIndex(x=>x.id===o.id); i<0?S.events.push(o):S.events[i]=o;
-    save(); close(); render();
+    const shBtn=modal.querySelector('#f_shared'), wasShared=!!e._shared, nowShared=!!(shBtn&&shBtn.classList.contains('on'));
+    o.u=Date.now();
+    if(nowShared){
+      const i=SH.events.findIndex(x=>x.id===o.id); i<0?SH.events.push(o):SH.events[i]=o;
+      if(!wasShared&&S.events.some(x=>x.id===o.id)){ S.events=S.events.filter(x=>x.id!==o.id); save(); }
+      saveShared();
+    }else{
+      const i=S.events.findIndex(x=>x.id===o.id); i<0?S.events.push(o):S.events[i]=o;
+      if(wasShared){ SH.events=SH.events.filter(x=>x.id!==o.id); SH.del[o.id]=Date.now(); saveShared(); }
+      save();
+    }
+    close(); render();
   });
   let dur=Math.max(15,toMin(e.end)-toMin(e.start));
   modal.querySelector('#f_e').addEventListener('change',()=>{ const d=toMin(V('f_e'))-toMin(V('f_s')); if(d>0) dur=d; });
@@ -857,7 +892,10 @@ function mEvent(pre){
     el.textContent=bits.join('   ·   ');
   };
   modal.querySelector('#f_a').addEventListener('change',ainfo); ainfo();
-  if(e.id) modal.querySelector('#f_del').onclick=()=>{ if(confirm('delete this block?')){S.events=S.events.filter(x=>x.id!==e.id);save();close();render();} };
+  if(e.id) modal.querySelector('#f_del').onclick=()=>{ if(!confirm('delete this block?')) return;
+    if(e._shared){ SH.events=SH.events.filter(x=>x.id!==e.id); SH.del[e.id]=Date.now(); saveShared(); }
+    else { S.events=S.events.filter(x=>x.id!==e.id); save(); }
+    close(); render(); };
 }
 
 /* ============ class modal ============ */
@@ -985,6 +1023,20 @@ let syncTimer=null, syncBusy=false, syncDirty=false, lastPull=0;
 const isDirty=()=>{ try{ return localStorage.getItem('gpDirty')==='1'; }catch(e){ return false; } };
 const clearDirty=()=>{ try{ localStorage.removeItem('gpDirty'); }catch(e){} };
 let pushPending=false;
+const ghH=()=>{ const c=getSync(), h={Accept:'application/vnd.github+json'}; if(c.token) h.Authorization='Bearer '+c.token; return h; };
+async function ghGet(path){
+  const r=await fetch(`https://api.github.com/repos/${REPO}/contents/${path}?_=${Date.now()}`,{headers:ghH(),cache:'no-store'});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j=await r.json(); return {sha:j.sha,text:atob(j.content.replace(/\n/g,''))};
+}
+async function ghPut(path,text,sha){
+  const body={message:'sync '+path+' '+new Date().toISOString(),content:btoa(text)}; if(sha) body.sha=sha;
+  const r=await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{method:'PUT',headers:Object.assign(ghH(),{'Content-Type':'application/json'}),body:JSON.stringify(body)});
+  if(!r.ok){ let m=''; try{ m=(await r.json()).message||''; }catch(x){} throw new Error('HTTP '+r.status+(m?' — '+m:'')); }
+}
+const slug=v=>String(v||'').toLowerCase().replace(/[^a-z0-9_-]/g,'');
+const myPath=()=>'people/'+(slug(getSync().who)||'me')+'.json';
 const itemCount=st=>['classes','assignments','events','meals','todos','packages','shop'].reduce((n,k)=>n+(((st||{})[k])||[]).length,0);
 function scheduleSync(){ const c=getSync(); if(!c.token||!c.pass) return; pushPending=true; clearTimeout(syncTimer); syncTimer=setTimeout(pushSync,3000); }
 async function pushSync(){
@@ -996,13 +1048,9 @@ async function pushSync(){
   try{
     S._t=Date.now();
     const blob=await encryptStr(JSON.stringify(S),c.pass);
-    const url=`https://api.github.com/repos/${REPO}/contents/data.json`;
-    const h={Authorization:'Bearer '+c.token,Accept:'application/vnd.github+json','Content-Type':'application/json'};
-    let sha; const g=await fetch(url,{headers:h,cache:'no-store'}); if(g.ok) sha=(await g.json()).sha;
+    const g=await ghGet(myPath()), sha=g?g.sha:undefined;
     if(sha&&itemCount(S)===0){ syncBusy=false; clearDirty(); setSyncMsg('this device is empty — pulling instead'); pullSync(true); return; }
-    const body={message:'sync '+new Date().toISOString(),content:btoa(blob)}; if(sha) body.sha=sha;
-    const r=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify(body)});
-    if(!r.ok){ let m=''; try{ m=(await r.json()).message||''; }catch(x){} throw new Error('HTTP '+r.status+(m?' — '+m:'')); }
+    await ghPut(myPath(),blob,sha);
     clearDirty(); persist(); setSyncMsg('synced '+nowLbl());
   }catch(e){
     const m=e.message||'';
@@ -1023,11 +1071,11 @@ async function pullSync(manual,force){
   else if((pushPending||syncBusy||isDirty())&&itemCount(S)>0){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
   if(veil.classList.contains('open')&&!manual) return;                         // never yank state mid-edit
   setSyncMsg('updating…');
+  pullOthers();
   try{
-    const r=await fetch(`https://api.github.com/repos/${REPO}/contents/data.json?_=${Date.now()}`,{headers:{Accept:'application/vnd.github+json'},cache:'no-store'});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j=await r.json(), plain=await decryptStr(atob(j.content.replace(/\n/g,'')),c.pass);
-    const remote=JSON.parse(plain);
+    const g=await ghGet(myPath());
+    if(!g) throw new Error('HTTP 404');
+    const remote=JSON.parse(await decryptStr(g.text,c.pass));
     lastPull=Date.now();
     if(itemCount(remote)===0&&itemCount(S)>0){ setSyncMsg('synced copy was empty — keeping this one'); if(c.token){ pushPending=true; pushSync(); } return; }
     if(remote._t&&S._t&&remote._t<=S._t){ setSyncMsg('up to date'); return; }
@@ -1035,16 +1083,61 @@ async function pullSync(manual,force){
     applyTheme(); render(); setSyncMsg('updated '+nowLbl());
   }catch(e){ setSyncMsg(e.name==='OperationError'?'wrong passphrase':/404/.test(e.message)?'nothing synced yet':'offline'); }
 }
+function mergeShared(a,b){
+  const del=Object.assign({},(a&&a.del)||{},(b&&b.del)||{}), map={};
+  [].concat((a&&a.events)||[],(b&&b.events)||[]).forEach(e=>{ if(!e||!e.id) return; const cur=map[e.id]; if(!cur||(e.u||0)>(cur.u||0)) map[e.id]=e; });
+  const events=Object.values(map).filter(e=>!(del[e.id]&&del[e.id]>=(e.u||0)));
+  const cutoff=Date.now()-30*864e5; Object.keys(del).forEach(k=>{ if(del[k]<cutoff) delete del[k]; });
+  return {events,del,_t:Math.max((a&&a._t)||0,(b&&b._t)||0)};
+}
+let shTimer=null, shBusy=false, shDirty=false, othersBusy=false;
+function saveShared(){ persistShared(); const c=getSync(); if(!c.token||!c.pass) return; clearTimeout(shTimer); shTimer=setTimeout(pushShared,2000); }
+async function pushShared(){
+  const c=getSync(); if(!c.token||!c.pass) return;
+  if(shBusy){ shDirty=true; return; } shBusy=true;
+  try{
+    const g=await ghGet('shared.json');
+    if(g){ try{ SH=mergeShared(SH,JSON.parse(await decryptStr(g.text,c.pass))); }catch(e){} }
+    SH._t=Date.now(); persistShared();
+    await ghPut('shared.json',await encryptStr(JSON.stringify(SH),c.pass),g?g.sha:undefined);
+    setSyncMsg('synced '+nowLbl()); render();
+  }catch(e){ if(/409/.test(e.message||'')) shDirty=true; setSyncMsg('shared sync failed'); }
+  shBusy=false; if(shDirty){ shDirty=false; saveShared(); }
+}
+async function pullOthers(){
+  const c=getSync(); if(!c.pass||othersBusy) return; othersBusy=true;
+  try{
+    if(!shTimer||!shBusy){
+      const g=await ghGet('shared.json');
+      if(g){ const before=JSON.stringify(SH.events); SH=mergeShared(SH,JSON.parse(await decryptStr(g.text,c.pass))); persistShared();
+        if(JSON.stringify(SH.events)!==before) render(); }
+    }
+    const dir=await fetch(`https://api.github.com/repos/${REPO}/contents/people?_=${Date.now()}`,{headers:ghH(),cache:'no-store'});
+    if(dir.ok){
+      const others=(await dir.json()).filter(f=>/\.json$/.test(f.name)&&('people/'+f.name)!==myPath());
+      if(others.length){
+        const f=others[0], o=await ghGet('people/'+f.name);
+        if(o){ TH={name:f.name.replace(/\.json$/,''),data:JSON.parse(await decryptStr(o.text,c.pass))};
+          try{ localStorage.setItem('gpTheirs',JSON.stringify(TH)); }catch(e){} render(); }
+      }else{ TH=null; try{ localStorage.removeItem('gpTheirs'); }catch(e){} }
+      renderOverlayBtn();
+    }
+  }catch(e){}
+  othersBusy=false;
+}
+function renderOverlayBtn(){ const b=$('#ovl'); if(!b) return; b.classList.toggle('show',!!(TH&&TH.data)); b.classList.toggle('on',overlay); b.title=TH?('overlay '+TH.name):''; }
 function mSyncSheet(){
   const c=getSync();
   open(`<h2>sync</h2>
+    <label>your name</label><input class="fld" id="f_who" value="${esc(c.who||'')}" autocomplete="off" autocapitalize="none">
     <label>passphrase</label><input class="fld" id="f_pass" type="password" value="${esc(c.pass||'')}" autocomplete="off">
     <label>github token</label><input class="fld" id="f_tok" type="password" value="${esc(c.token||'')}" autocomplete="off">
     <div class="mini" id="f_smsg" style="margin-top:8px;min-height:14px">${esc($('#syncmsg').textContent)}</div>
     <div class="acts"><button class="btn g" id="f_x">close</button><button class="btn p" id="f_ok">update now</button></div>`,
-  ()=>{ setSync({pass:V('f_pass'),token:V('f_tok')}); close(); if(isDirty()&&getSync().token) pushSync(); else pullSync(true); });
+  ()=>{ setSync({who:slug(V('f_who')),pass:V('f_pass'),token:V('f_tok')}); close(); if(isDirty()&&getSync().token) pushSync(); else pullSync(true); });
 }
 $('#msync').onclick=mSyncSheet;
+$('#ovl').onclick=()=>{ overlay=!overlay; try{ localStorage.setItem('gpOverlay',overlay?'1':'0'); }catch(e){} renderOverlayBtn(); render(); };
 
 /* ============ package modal ============ */
 function mPkg(p0){
@@ -1104,7 +1197,8 @@ function mMenu(){
     <div class="themes" id="thwrap">${S.themes.map(t=>`<span class="th${t.bg.toLowerCase()===curBg().toLowerCase()&&t.accent.toLowerCase()===curAc().toLowerCase()?' on':''}" data-th="${t.id}" style="background:${t.bg}" title="${t.bg} / ${t.accent}"><i style="background:${t.accent}"></i><b data-thdel="${t.id}">${'\u00d7'}</b></span>`).join('')||'<div class="empty-note" style="padding:2px">—</div>'}</div>
     <button class="menuitem" id="m_thadd" style="margin-top:9px">${ico('plus',14)} save these as a theme</button>
     <div style="height:14px"></div>
-    <label>phone sync</label>
+    <label>sync</label>
+    <input class="fld" id="f_who" placeholder="your name" value="${esc(getSync().who||'')}" autocomplete="off" style="margin-bottom:6px">
     <input class="fld" id="f_tok" type="password" placeholder="github token" value="${esc(getSync().token||'')}" autocomplete="off">
     <div class="mini" id="f_tokhint" style="margin-top:4px;min-height:14px"></div>
     <input class="fld" id="f_pass" type="password" placeholder="passphrase" value="${esc(getSync().pass||'')}" autocomplete="off" style="margin-top:6px">
@@ -1158,6 +1252,7 @@ function mMenu(){
       :v.indexOf('ghp_')===0?'classic token — will work only if it has the repo scope'
       :`this isn’t a github token (starts with “${v.slice(0,6)}…”) — it should start with github_pat_`; };
   modal.querySelector('#f_tok').addEventListener('input',ev=>{ setSync({token:ev.target.value.trim()}); tokHint(); }); tokHint();
+  modal.querySelector('#f_who').addEventListener('input',ev=>setSync({who:slug(ev.target.value)}));
   modal.querySelector('#f_pass').addEventListener('input',ev=>setSync({pass:ev.target.value}));
   modal.querySelector('#m_syncnow').onclick=()=>pushSync();
   modal.querySelector('#m_pullnow').onclick=()=>{ if(confirm('replace everything on this device with the synced copy?')){ close(); pullSync(true,true); } };
@@ -1352,7 +1447,8 @@ grid.addEventListener('pointerup',e=>{
   else if(d.mode==='resizetop'){ en=d.e0; s=clamp(d.s0+d.dm,START,en-15); }
   else { s=clamp(d.s0+d.dm,START,END-dur); en=s+dur; }
   commit(d.kind,d.key,s,en,d.day+d.dc);
-  save(); render();
+  if(d.kind==='shared') saveShared(); else save();
+  render();
 });
 let dghost=null, sdrag=null, swallowClick=false;
 function dropSize(d){
@@ -1425,11 +1521,14 @@ function commit(kind,key,s,e,dayIdx){
     x.start=fromMin(s); x.end=fromMin(e); x.date=ds; }
   else if(kind==='meal'){ const x=S.meals.find(y=>y.id===key); if(!x) return;
     x.time=fromMin(s); x.dur=e-s; x.date=ds; }
+  else if(kind==='shared'){ const x=SH.events.find(y=>y.id===key); if(!x) return;
+    x.start=fromMin(s); x.end=fromMin(e); x.date=ds; x.u=Date.now(); }
 }
 function openItem(kind,key){
   if(kind==='event') mEvent(Object.assign({},S.events.find(x=>x.id===key)));
   else if(kind==='class') mClass(JSON.parse(JSON.stringify(cls(key.split('|')[0]))));
   else if(kind==='meal'){ const m=S.meals.find(x=>x.id===key); mMeal(m.date,m.slot); }
+  else if(kind==='shared'){ const x=SH.events.find(y=>y.id===key); if(x) mEvent(Object.assign({},x,{_shared:true})); }
 }
 
 /* ============ sample ============ */
@@ -1483,9 +1582,11 @@ fitHours();
 render();
 {
   const c=getSync();
+  if((c.token||c.pass)&&!c.who) setSync({who:'grace'});
+  renderOverlayBtn();
   if(c.pass){ pullSync(); }
   else if(MOBILE) setTimeout(mSyncSheet,300);
-  const maybePull=()=>{ if(!document.hidden&&getSync().pass&&Date.now()-lastPull>45000) pullSync(); };
+  const maybePull=()=>{ if(!document.hidden&&getSync().pass&&Date.now()-lastPull>45000){ pullSync(); } };
   document.addEventListener('visibilitychange',maybePull);
   window.addEventListener('focus',maybePull);
   setInterval(maybePull,120000);
