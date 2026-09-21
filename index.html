@@ -95,6 +95,9 @@ main{flex:1;display:flex;min-height:0}
   font-size:12.5px;line-height:1.3;border:1.5px solid rgba(0,0,0,.07);cursor:grab;z-index:3;
   box-shadow:0 1px 0 rgba(0,0,0,.05);user-select:none;transition:box-shadow .12s}
 .ev:hover{box-shadow:0 4px 12px -4px var(--sh-strong);z-index:5}
+.ev.bg{z-index:2}
+.ev.bg:hover{z-index:2}
+.ev:not(.bg){box-shadow:0 1px 0 rgba(0,0,0,.05),0 3px 10px -6px var(--sh-strong)}
 .ev.dragging{opacity:.85;cursor:grabbing;z-index:20;box-shadow:0 10px 22px -8px var(--sh-strong)}
 .ev .t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ev .s{font-size:11px;opacity:.72;font-weight:600}
@@ -386,7 +389,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <script>
 /* ============ mode ============ */
 const REPO='graceliu49/weekly-planner';
-const BUILD='1789943672';
+const BUILD='1790008057';
 const MOBILE=(typeof location!=='undefined'&&/[?&]m=1/.test(location.search))
   ||(typeof matchMedia==='function'&&matchMedia('(max-width:720px)').matches);
 if(MOBILE&&typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.add('mobile');
@@ -520,16 +523,21 @@ function dayItems(ds,dow){
   return out;
 }
 function layout(items){
-  items.sort((a,b)=>a.start-b.start||b.end-a.end);
+  // classes (and the other person's blocks) are a backdrop: always full width, never split the column.
+  // everything else lays out among itself and draws on top.
+  const isBg=it=>it.kind==='class'||it.theirs;
+  const bg=items.filter(isBg), fg=items.filter(it=>!isBg(it));
+  bg.forEach(it=>{ it._c=0; it._n=1; it.bg=true; });
+  fg.sort((a,b)=>a.start-b.start||b.end-a.end);
   const cl=[]; let cur=[],curEnd=-1;
-  items.forEach(it=>{const e=Math.max(it.end,it.start+25);
+  fg.forEach(it=>{const e=Math.max(it.end,it.start+25);
     if(cur.length&&it.start>=curEnd){cl.push(cur);cur=[];curEnd=-1;}
     cur.push(it);curEnd=Math.max(curEnd,e);});
   if(cur.length)cl.push(cur);
   cl.forEach(g=>{const cols=[];
     g.forEach(it=>{let k=0;while(cols[k]!=null&&cols[k]>it.start)k++;cols[k]=Math.max(it.end,it.start+25);it._c=k;});
     g.forEach(it=>it._n=cols.length);});
-  return items;
+  return bg.concat(fg);
 }
 
 /* ============ render ============ */
@@ -645,7 +653,7 @@ function renderGrid(){
       const top=(it.start-START)*PPM, hgt=Math.max(17,(it.end-it.start)*PPM-2);
       const w=100/it._n, l=it._c*w;
       const el=document.createElement('div');
-      el.className='ev'+(it.locked?' locked':'')+(hgt<40?' compact':'')+(it.star?' star':'')+(it.theirs?' theirs':'')+(it.shared?' shared':'');
+      el.className='ev'+(it.locked?' locked':'')+(hgt<40?' compact':'')+(it.star?' star':'')+(it.theirs?' theirs':'')+(it.shared?' shared':'')+(it.bg?' bg':'');
       el.style.cssText=`top:${top}px;height:${hgt}px;left:calc(${l}% + 2px);width:calc(${w}% - 4px);background:${it.color};color:${ink(it.color)}`;
       el.dataset.kind=it.kind; el.dataset.key=it.key; el.dataset.day=i; el.dataset.s=it.start; el.dataset.e=it.end;
       el.innerHTML=`<div class="t">${it.star?icoF('star',11):(it.icon?ico(it.icon,11):'')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title)}</span></div>`+
