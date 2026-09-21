@@ -105,10 +105,6 @@ main{flex:1;display:flex;min-height:0}
 .ev .rz{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize}
 .ev .rzt{position:absolute;left:0;right:0;top:0;height:7px;cursor:ns-resize}
 .ev.locked{cursor:pointer;opacity:.94}
-.ev.theirs{opacity:.6;border:1.5px dashed currentColor;cursor:default;
-  background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.4) 0 3px,transparent 3px 9px)}
-.ev.shared{border-left:5px solid currentColor}
-#ovl{display:none} #ovl.show{display:grid} #ovl.on{background:var(--accent-soft);color:var(--ink)}
 .ev.star{border-width:2.5px;border-color:currentColor;font-weight:700;box-shadow:0 3px 0 rgba(0,0,0,.09)}
 .ev.star .s{font-weight:600;opacity:.82}
 .tag.star{border-width:2px;border-color:currentColor;font-weight:800}
@@ -280,7 +276,6 @@ body.mobile .veil{padding:0;align-items:flex-end}
     <button class="chipbtn c-asgn" data-quick="assignment">+ assignment</button>
     <button class="chipbtn c-class" data-quick="class">+ class</button>
     <span id="syncmsg"></span>
-    <button class="nav" id="ovl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9.4 11.2a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6M2.9 20.4v-1.6a4.7 4.7 0 0 1 4.7-4.6h3.6a4.7 4.7 0 0 1 4.7 4.6v1.6M16.6 5.1a3.3 3.3 0 0 1 0 6.2M18.2 14.4a4.7 4.7 0 0 1 3 4.4v1.6"/></svg></button>
     <button class="nav" id="msync" title="sync"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-14.2 5M4 12a8 8 0 0 1 14.2-5M18 3v4h-4M6 21v-4h4"/></svg></button>
     <button class="chipbtn c-ghost" id="io">⋯</button>
   </header>
@@ -389,7 +384,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <script>
 /* ============ mode ============ */
 const REPO='graceliu49/weekly-planner';
-const BUILD='1790008057';
+const BUILD='1790008336';
 const MOBILE=(typeof location!=='undefined'&&/[?&]m=1/.test(location.search))
   ||(typeof matchMedia==='function'&&matchMedia('(max-width:720px)').matches);
 if(MOBILE&&typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.add('mobile');
@@ -436,26 +431,35 @@ const P={
 };
 const icoF=(k,sz,w)=>ico(k,sz,w).replace('class="ic"','class="ic icf"');
 const ico=(k,sz,w)=>`<svg class="ic" width="${sz||14}" height="${sz||14}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w||1.9}" stroke-linecap="round" stroke-linejoin="round"><path d="${P[k]}"/></svg>`;
-const PAL=[{c:'#FFD5E5',t:'#A85A7E'},{c:'#FFC9C9',t:'#B85B5B'},{c:'#FFE1C9',t:'#AE6E36'},
-           {c:'#FFF2BE',t:'#937C28'},{c:'#DDEFD3',t:'#568343'},{c:'#C8F1DF',t:'#2C8768'},
-           {c:'#CFE6FF',t:'#3B72AA'},{c:'#E2D7FF',t:'#6A52B4'}];
+const PAL=[{c:'#FFD5E5'},{c:'#FFC9C9'},{c:'#FFE1C9'},{c:'#FFF2BE'},{c:'#DDEFD3'},{c:'#C8F1DF'},{c:'#CFE6FF'},{c:'#E2D7FF'}];
+const SOC=['#E3B7BE','#E8B69E','#E8D28F','#C5D0A8','#ACD4CC','#ADC1DE','#CBB2D2','#D8CABC'];   // social: dusty, distinct from the class pastels
+const isPal=c=>PAL.some(p=>String(p.c).toLowerCase()===String(c||'').toLowerCase());
+const isSoc=c=>SOC.some(x=>x.toLowerCase()===String(c||'').toLowerCase());
+const lumOf=c=>{ const v=rgbOf(c).map(x=>{ x/=255; return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4); }); return .2126*v[0]+.7152*v[1]+.0722*v[2]; };
+const contrast=(a,b)=>{ const x=lumOf(a),y=lumOf(b); return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); };
+const inkCache={};
 function ink(c){
   if(!/^#[0-9a-f]{6}$/i.test(c||'')) return '#5C4A55';
-  const [h,sa,l]=toHsl(c);
-  return l<0.45 ? '#FFFFFF' : hsl(h,Math.min(sa,0.55),0.30);
+  if(inkCache[c]) return inkCache[c];
+  const [h,sa,l]=toHsl(c); let out='#FFFFFF';
+  if(l>=0.45){ out=hsl(h,Math.min(sa,0.55),0.12);
+    for(const L of [0.30,0.25,0.20,0.15]){ const t=hsl(h,Math.min(sa,0.55),L); if(contrast(c,t)>=4.5){ out=t; break; } } }
+  return (inkCache[c]=out);
 }
 
 const START=0, END=24*60, DAYTOP=7*60, DAYBOT=19*60;
 let HOUR=54, PPM=HOUR/60;
 const TYPES={solidcore:{lbl:'solidcore',ic:'spark',c:'#FFD5E5',dur:50},study:{lbl:'work block',ic:'book',c:'#CFE6FF',dur:90},
-             social:{lbl:'social',ic:'people',c:'#E2D7FF',dur:120},meal:{lbl:'meal',ic:'fork',c:'#DDEFD3',dur:60},
+             social:{lbl:'social',ic:'people',c:'#CBB2D2',dur:120},meal:{lbl:'meal',ic:'fork',c:'#E8B69E',dur:60},
              other:{lbl:'other',ic:null,c:'#FFC9C9',dur:60}};
 const HM=m=>m<60?m+'m':(m/60).toFixed(m%60?1:0)+'h';
+const mealColor=(slot,m)=>{ const ok=v=>/^#[0-9a-f]{6}$/i.test(v||'');
+  if(m&&ok(m.color)) return m.color; const d=(S.mealColors||{})[slot]; if(ok(d)) return d; return slot==='lunch'?'#C5D0A8':'#E8B69E'; };
 const blockedMins=(f,id)=>S.events.filter(e=>e[f]===id).reduce((n,e)=>n+toMin(e.end)-toMin(e.start),0);
 function leftFor(a){ const est=(+a.est||0)*60; return est?Math.max(0,est-blockedMins('asgn',a.id)):0; }
 
 /* ============ state ============ */
-const blank=()=>({classes:[],assignments:[],events:[],meals:[],todos:[],themes:[],palette:[],hidden:[],packages:[],shop:[],term:{start:'',end:''}});
+const blank=()=>({classes:[],assignments:[],events:[],meals:[],todos:[],themes:[],palette:[],hidden:[],packages:[],shop:[],mealColors:{},term:{start:'',end:''}});
 let S, anchor=mondayOf(new Date()), asgnFilter='soon', pkgFilter='active', shopTab='wish';
 let RAW=null;
 try{ RAW=localStorage.getItem('gracePlanner'); S=Object.assign(blank(),JSON.parse(RAW||'{}')); }
@@ -471,12 +475,7 @@ function snapshot(raw){
 }
 snapshot(RAW);
 { const B=blank(); for(const k in B) if(S[k]==null) S[k]=B[k]; }
-let SH={events:[],del:{},_t:0}, TH=null, overlay=false;
-try{ SH=Object.assign({events:[],del:{},_t:0},JSON.parse(localStorage.getItem('gpShared')||'{}')); }catch(e){}
-try{ TH=JSON.parse(localStorage.getItem('gpTheirs')||'null'); }catch(e){}
-try{ overlay=localStorage.getItem('gpOverlay')==='1'; }catch(e){}
-function persistShared(){ try{ localStorage.setItem('gpShared',JSON.stringify(SH)); }catch(e){} }
-const otherName=()=>TH&&TH.name?TH.name:'';
+
 let saveWarned=false;
 function persist(){ try{ localStorage.setItem('gracePlanner',JSON.stringify(S)); }
   catch(e){ if(!saveWarned){saveWarned=true;alert('this browser blocked local saving, so changes won’t persist.');} } }
@@ -505,27 +504,14 @@ function dayItems(ds,dow){
     out.push({kind:'event',key:e.id,ref:e,title:e.title,icon:(TYPES[e.type]||{}).ic,notes:e.notes||'',
       sub:[link,e.who,e.loc].filter(Boolean).join(' · '),star:!!e.star,start:toMin(e.start),end:toMin(e.end),color:e.color});
   });
-  (SH.events||[]).filter(e=>e.date===ds).forEach(e=>out.push({kind:'shared',key:e.id,ref:e,title:e.title,icon:'people',shared:true,
-    notes:e.notes||'',sub:[e.who,e.loc].filter(Boolean).join(' · '),star:!!e.star,start:toMin(e.start),end:toMin(e.end),color:e.color}));
-  if(overlay&&TH&&TH.data){
-    const T=TH.data, nm=TH.name;
-    (T.classes||[]).forEach(c=>(c.meetings||[]).forEach(m=>{
-      if(!(m.days||[]).includes(dow)) return;
-      if(T.term&&T.term.start&&ds<T.term.start) return; if(T.term&&T.term.end&&ds>T.term.end) return;
-      out.push({kind:'theirs',key:'c'+c.id,title:c.name,sub:nm,start:toMin(m.start),end:toMin(m.end),color:c.color,locked:true,theirs:true}); }));
-    (T.events||[]).filter(e=>e.date===ds).forEach(e=>out.push({kind:'theirs',key:'e'+e.id,title:e.title,icon:(TYPES[e.type]||{}).ic,
-      sub:[nm,e.who].filter(Boolean).join(' · '),start:toMin(e.start),end:toMin(e.end),color:e.color,locked:true,theirs:true}));
-    (T.meals||[]).filter(m=>m.date===ds&&m.time).forEach(m=>out.push({kind:'theirs',key:'m'+m.id,title:m.who||m.slot,icon:m.slot==='lunch'?'bowl':'fork',
-      sub:nm,start:toMin(m.time),end:toMin(m.time)+(+m.dur||60),color:curBg(),locked:true,theirs:true}));
-  }
   S.meals.filter(m=>m.date===ds&&m.time).forEach(m=>out.push({kind:'meal',key:m.id,ref:m,
-    title:m.who||m.slot,icon:m.slot==='lunch'?'bowl':'fork',sub:m.place||'',start:toMin(m.time),end:toMin(m.time)+(+m.dur||60),color:curBg()}));
+    title:m.who||m.slot,icon:m.slot==='lunch'?'bowl':'fork',sub:m.place||'',start:toMin(m.time),end:toMin(m.time)+(+m.dur||60),color:mealColor(m.slot,m)}));
   return out;
 }
 function layout(items){
-  // classes (and the other person's blocks) are a backdrop: always full width, never split the column.
+  // classes are a backdrop: always full width, never split the column.
   // everything else lays out among itself and draws on top.
-  const isBg=it=>it.kind==='class'||it.theirs;
+  const isBg=it=>it.kind==='class';
   const bg=items.filter(isBg), fg=items.filter(it=>!isBg(it));
   bg.forEach(it=>{ it._c=0; it._n=1; it.bg=true; });
   fg.sort((a,b)=>a.start-b.start||b.end-a.end);
@@ -627,7 +613,7 @@ function renderHead(){
     const lunch=S.meals.find(m=>m.date===ds&&m.slot==='lunch');
     const dinner=S.meals.find(m=>m.date===ds&&m.slot==='dinner');
     const mchip=(m,slot,ik)=>m&&(m.who||m.place)
-      ? `<button class="tag m" style="background:${curBg()};color:${ink(curBg())}" data-meal="${ds}|${slot}" title="${esc(m.who||'')} ${esc(m.place||'')}">${ico(ik,11)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(m.who||m.place)}</span></button>`
+      ? `<button class="tag m" style="background:${mealColor(slot,m)};color:${ink(mealColor(slot,m))}" data-meal="${ds}|${slot}" title="${esc(m.who||'')} ${esc(m.place||'')}">${ico(ik,11)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(m.who||m.place)}</span></button>`
       : `<button class="tag m empty" data-meal="${ds}|${slot}" title="${slot}">${ico(ik,11)}</button>`;
     el.className='dh'+(ds===tod?' today':'');
     el.innerHTML=`<div class="dow">${DOW[i]}</div><div class="dnum">${d.getDate()}</div>
@@ -653,7 +639,7 @@ function renderGrid(){
       const top=(it.start-START)*PPM, hgt=Math.max(17,(it.end-it.start)*PPM-2);
       const w=100/it._n, l=it._c*w;
       const el=document.createElement('div');
-      el.className='ev'+(it.locked?' locked':'')+(hgt<40?' compact':'')+(it.star?' star':'')+(it.theirs?' theirs':'')+(it.shared?' shared':'')+(it.bg?' bg':'');
+      el.className='ev'+(it.locked?' locked':'')+(hgt<40?' compact':'')+(it.star?' star':'')+(it.bg?' bg':'');
       el.style.cssText=`top:${top}px;height:${hgt}px;left:calc(${l}% + 2px);width:calc(${w}% - 4px);background:${it.color};color:${ink(it.color)}`;
       el.dataset.kind=it.kind; el.dataset.key=it.key; el.dataset.day=i; el.dataset.s=it.start; el.dataset.e=it.end;
       el.innerHTML=`<div class="t">${it.star?icoF('star',11):(it.icon?ico(it.icon,11):'')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title)}</span></div>`+
@@ -789,15 +775,16 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&veil.classList.contains('open')) close();
   if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&onSave) onSave();
 });
-const allColors=()=>PAL.map(p=>p.c).concat((S.palette||[]).filter(c=>/^#[0-9a-f]{6}$/i.test(c)))
+const allColors=()=>PAL.map(p=>p.c).concat(SOC,(S.palette||[]).filter(c=>/^#[0-9a-f]{6}$/i.test(c)))
   .filter(c=>!(S.hidden||[]).some(h=>h.toLowerCase()===c.toLowerCase()));
 const lc=v=>String(v||'').toLowerCase();
 const classCols=()=>S.classes.map(c=>lc(c.color));
 const asgnCols=()=>S.classes.map(c=>lc(c.acolor)).concat(S.assignments.map(a=>lc(a.color)));
 function swHTML(sel,role){
   let list=allColors();
-  if(role==='class'){ const bad=asgnCols(); list=list.filter(c=>!bad.includes(lc(c))); }
-  else if(role==='asgn'){ const bad=classCols(); list=list.filter(c=>!bad.includes(lc(c))); }
+  if(role==='class'){ const bad=asgnCols(); list=list.filter(c=>!isSoc(c)&&!bad.includes(lc(c))); }
+  else if(role==='asgn'){ const bad=classCols(); list=list.filter(c=>!isSoc(c)&&!bad.includes(lc(c))); }
+  else if(role==='social'){ list=list.filter(c=>!isPal(c)); }
   if(/^#[0-9a-f]{6}$/i.test(sel||'')&&!list.some(c=>lc(c)===lc(sel))) list.push(sel);
   return list.map(c=>`<i data-c="${c}" class="${lc(c)===lc(sel)?'on':''}" style="background:${c}"><b data-cdel="${c}">\u00d7</b></i>`).join('');
 }
@@ -826,7 +813,7 @@ modal.addEventListener('click',e=>{
     const v=lc(cd.dataset.cdel);
     if(allColors().length<=1) return;
     S.palette=(S.palette||[]).filter(x=>lc(x)!==v);
-    if(PAL.some(pp=>lc(pp.c)===v)&&!(S.hidden||[]).some(h=>lc(h)===v)) S.hidden.push(cd.dataset.cdel);
+    if((isPal(v)||isSoc(v))&&!(S.hidden||[]).some(h=>lc(h)===v)) S.hidden.push(cd.dataset.cdel);
     save(); repaintSw(); return; }
   const s=e.target.closest('.sw i'); if(s){ s.parentNode.querySelectorAll('i').forEach(x=>x.classList.remove('on')); s.classList.add('on'); }
   const d=e.target.closest('.days b'); if(d) d.classList.toggle('on');
@@ -854,7 +841,6 @@ function mEvent(pre){
     <div class="mini" id="f_ainfo" style="margin-top:6px;min-height:14px"></div>
     <label>color</label>${swatch(e.color)}
     <button class="startog${e.star?' on':''}" id="f_star">${ico('star',15)} important</button>
-    ${getSync().who?`<button class="startog${e._shared?' on':''}" id="f_shared" style="margin-top:8px">${ico('people',15)} shared${otherName()?' with '+esc(otherName()):''}</button>`:''}
     <label>notes</label><textarea class="fld" id="f_n">${esc(e.notes)}</textarea>
     <div class="acts">${e.id?'<button class="btn d" id="f_del">delete</button>':''}
       <button class="btn g" id="f_x">cancel</button><button class="btn p" id="f_ok">save</button></div>`,
@@ -864,18 +850,8 @@ function mEvent(pre){
       asgn:V('f_a').indexOf('a:')===0?V('f_a').slice(2):'',todo:V('f_a').indexOf('t:')===0?V('f_a').slice(2):'',notes:V('f_n'),
       star:modal.querySelector('#f_star').classList.contains('on'),color:pickedColor(e.color)};
     if(toMin(o.end)<=toMin(o.start)) o.end=fromMin(Math.min(END,toMin(o.start)+30));
-    const shBtn=modal.querySelector('#f_shared'), wasShared=!!e._shared, nowShared=!!(shBtn&&shBtn.classList.contains('on'));
-    o.u=Date.now();
-    if(nowShared){
-      const i=SH.events.findIndex(x=>x.id===o.id); i<0?SH.events.push(o):SH.events[i]=o;
-      if(!wasShared&&S.events.some(x=>x.id===o.id)){ S.events=S.events.filter(x=>x.id!==o.id); save(); }
-      saveShared();
-    }else{
-      const i=S.events.findIndex(x=>x.id===o.id); i<0?S.events.push(o):S.events[i]=o;
-      if(wasShared){ SH.events=SH.events.filter(x=>x.id!==o.id); SH.del[o.id]=Date.now(); saveShared(); }
-      save();
-    }
-    close(); render();
+    const i=S.events.findIndex(x=>x.id===o.id); i<0?S.events.push(o):S.events[i]=o;
+    save(); close(); render();
   });
   let dur=Math.max(15,toMin(e.end)-toMin(e.start));
   modal.querySelector('#f_e').addEventListener('change',()=>{ const d=toMin(V('f_e'))-toMin(V('f_s')); if(d>0) dur=d; });
@@ -883,7 +859,7 @@ function mEvent(pre){
     modal.querySelector('#f_e').value=fromMin(Math.min(END,toMin(V('f_s'))+dur)); });
   modal.querySelector('#f_k').addEventListener('change',ev=>{
     const k=ev.target.value, T=TYPES[k];
-    repaintSw('c', k==='meal'?curBg():T.c);
+    repaintSw('c', k==='meal'?mealColor('dinner'):T.c);
     dur=T.dur; const s=toMin(V('f_s')); modal.querySelector('#f_e').value=fromMin(Math.min(END,s+T.dur));
     if(!V('f_t')&&k==='solidcore') modal.querySelector('#f_t').value='solidcore';
   });
@@ -900,10 +876,7 @@ function mEvent(pre){
     el.textContent=bits.join('   ·   ');
   };
   modal.querySelector('#f_a').addEventListener('change',ainfo); ainfo();
-  if(e.id) modal.querySelector('#f_del').onclick=()=>{ if(!confirm('delete this block?')) return;
-    if(e._shared){ SH.events=SH.events.filter(x=>x.id!==e.id); SH.del[e.id]=Date.now(); saveShared(); }
-    else { S.events=S.events.filter(x=>x.id!==e.id); save(); }
-    close(); render(); };
+  if(e.id) modal.querySelector('#f_del').onclick=()=>{ if(confirm('delete this block?')){ S.events=S.events.filter(x=>x.id!==e.id); save(); close(); render(); } };
 }
 
 /* ============ class modal ============ */
@@ -977,11 +950,13 @@ function mMeal(ds,slot){
     <label>where</label><input class="fld" id="f_p" value="${esc(m.place)}">
     <div class="two"><div><label>time</label><input class="fld" id="f_t" type="time" value="${m.time||''}"></div>
       <div><label>mins</label><input class="fld" id="f_m" type="number" min="15" step="15" value="${m.dur||60}"></div></div>
+    <label>color</label>${swatch(mealColor(slot,m),'c','social')}
     <label>notes</label><textarea class="fld" id="f_n">${esc(m.notes)}</textarea>
     <div class="acts">${m.id?'<button class="btn d" id="f_del">clear</button>':''}
       <button class="btn g" id="f_x">cancel</button><button class="btn p" id="f_ok">save</button></div>`,
   ()=>{
-    const o={id:m.id||uid(),date:ds,slot,who:V('f_w'),place:V('f_p'),time:V('f_t'),dur:+V('f_m')||60,notes:V('f_n')};
+    const o={id:m.id||uid(),date:ds,slot,who:V('f_w'),place:V('f_p'),time:V('f_t'),dur:+V('f_m')||60,notes:V('f_n'),color:pickedColor(mealColor(slot,m))};
+    if(!S.mealColors) S.mealColors={}; S.mealColors[slot]=o.color;
     S.meals=S.meals.filter(x=>!(x.date===ds&&x.slot===slot));
     if(o.who||o.place||o.time) S.meals.push(o);
     save(); close(); render();
@@ -1079,7 +1054,6 @@ async function pullSync(manual,force){
   else if((pushPending||syncBusy||isDirty())&&itemCount(S)>0){ if(c.token) pushSync(); else setSyncMsg('add the github token so your edits can sync'); return; }
   if(veil.classList.contains('open')&&!manual) return;                         // never yank state mid-edit
   setSyncMsg('updating…');
-  pullOthers();
   try{
     const g=await ghGet(myPath());
     if(!g) throw new Error('HTTP 404');
@@ -1091,61 +1065,16 @@ async function pullSync(manual,force){
     applyTheme(); render(); setSyncMsg('updated '+nowLbl());
   }catch(e){ setSyncMsg(e.name==='OperationError'?'wrong passphrase':/404/.test(e.message)?'nothing synced yet':'offline'); }
 }
-function mergeShared(a,b){
-  const del=Object.assign({},(a&&a.del)||{},(b&&b.del)||{}), map={};
-  [].concat((a&&a.events)||[],(b&&b.events)||[]).forEach(e=>{ if(!e||!e.id) return; const cur=map[e.id]; if(!cur||(e.u||0)>(cur.u||0)) map[e.id]=e; });
-  const events=Object.values(map).filter(e=>!(del[e.id]&&del[e.id]>=(e.u||0)));
-  const cutoff=Date.now()-30*864e5; Object.keys(del).forEach(k=>{ if(del[k]<cutoff) delete del[k]; });
-  return {events,del,_t:Math.max((a&&a._t)||0,(b&&b._t)||0)};
-}
-let shTimer=null, shBusy=false, shDirty=false, othersBusy=false;
-function saveShared(){ persistShared(); const c=getSync(); if(!c.token||!c.pass) return; clearTimeout(shTimer); shTimer=setTimeout(pushShared,2000); }
-async function pushShared(){
-  const c=getSync(); if(!c.token||!c.pass) return;
-  if(shBusy){ shDirty=true; return; } shBusy=true;
-  try{
-    const g=await ghGet('shared.json');
-    if(g){ try{ SH=mergeShared(SH,JSON.parse(await decryptStr(g.text,c.pass))); }catch(e){} }
-    SH._t=Date.now(); persistShared();
-    await ghPut('shared.json',await encryptStr(JSON.stringify(SH),c.pass),g?g.sha:undefined);
-    setSyncMsg('synced '+nowLbl()); render();
-  }catch(e){ if(/409/.test(e.message||'')) shDirty=true; setSyncMsg('shared sync failed'); }
-  shBusy=false; if(shDirty){ shDirty=false; saveShared(); }
-}
-async function pullOthers(){
-  const c=getSync(); if(!c.pass||othersBusy) return; othersBusy=true;
-  try{
-    if(!shTimer||!shBusy){
-      const g=await ghGet('shared.json');
-      if(g){ const before=JSON.stringify(SH.events); SH=mergeShared(SH,JSON.parse(await decryptStr(g.text,c.pass))); persistShared();
-        if(JSON.stringify(SH.events)!==before) render(); }
-    }
-    const dir=await fetch(`https://api.github.com/repos/${REPO}/contents/people?_=${Date.now()}`,{headers:ghH(),cache:'no-store'});
-    if(dir.ok){
-      const others=(await dir.json()).filter(f=>/\.json$/.test(f.name)&&('people/'+f.name)!==myPath());
-      if(others.length){
-        const f=others[0], o=await ghGet('people/'+f.name);
-        if(o){ TH={name:f.name.replace(/\.json$/,''),data:JSON.parse(await decryptStr(o.text,c.pass))};
-          try{ localStorage.setItem('gpTheirs',JSON.stringify(TH)); }catch(e){} render(); }
-      }else{ TH=null; try{ localStorage.removeItem('gpTheirs'); }catch(e){} }
-      renderOverlayBtn();
-    }
-  }catch(e){}
-  othersBusy=false;
-}
-function renderOverlayBtn(){ const b=$('#ovl'); if(!b) return; b.classList.toggle('show',!!(TH&&TH.data)); b.classList.toggle('on',overlay); b.title=TH?('overlay '+TH.name):''; }
 function mSyncSheet(){
   const c=getSync();
   open(`<h2>sync</h2>
-    <label>your name</label><input class="fld" id="f_who" value="${esc(c.who||'')}" autocomplete="off" autocapitalize="none">
     <label>passphrase</label><input class="fld" id="f_pass" type="password" value="${esc(c.pass||'')}" autocomplete="off">
     <label>github token</label><input class="fld" id="f_tok" type="password" value="${esc(c.token||'')}" autocomplete="off">
     <div class="mini" id="f_smsg" style="margin-top:8px;min-height:14px">${esc($('#syncmsg').textContent)}</div>
     <div class="acts"><button class="btn g" id="f_x">close</button><button class="btn p" id="f_ok">update now</button></div>`,
-  ()=>{ setSync({who:slug(V('f_who')),pass:V('f_pass'),token:V('f_tok')}); close(); if(isDirty()&&getSync().token) pushSync(); else pullSync(true); });
+  ()=>{ setSync({pass:V('f_pass'),token:V('f_tok')}); close(); if(isDirty()&&getSync().token) pushSync(); else pullSync(true); });
 }
 $('#msync').onclick=mSyncSheet;
-$('#ovl').onclick=()=>{ overlay=!overlay; try{ localStorage.setItem('gpOverlay',overlay?'1':'0'); }catch(e){} renderOverlayBtn(); render(); };
 
 /* ============ package modal ============ */
 function mPkg(p0){
@@ -1206,7 +1135,6 @@ function mMenu(){
     <button class="menuitem" id="m_thadd" style="margin-top:9px">${ico('plus',14)} save these as a theme</button>
     <div style="height:14px"></div>
     <label>sync</label>
-    <input class="fld" id="f_who" placeholder="your name" value="${esc(getSync().who||'')}" autocomplete="off" style="margin-bottom:6px">
     <input class="fld" id="f_tok" type="password" placeholder="github token" value="${esc(getSync().token||'')}" autocomplete="off">
     <div class="mini" id="f_tokhint" style="margin-top:4px;min-height:14px"></div>
     <input class="fld" id="f_pass" type="password" placeholder="passphrase" value="${esc(getSync().pass||'')}" autocomplete="off" style="margin-top:6px">
@@ -1260,7 +1188,6 @@ function mMenu(){
       :v.indexOf('ghp_')===0?'classic token — will work only if it has the repo scope'
       :`this isn’t a github token (starts with “${v.slice(0,6)}…”) — it should start with github_pat_`; };
   modal.querySelector('#f_tok').addEventListener('input',ev=>{ setSync({token:ev.target.value.trim()}); tokHint(); }); tokHint();
-  modal.querySelector('#f_who').addEventListener('input',ev=>setSync({who:slug(ev.target.value)}));
   modal.querySelector('#f_pass').addEventListener('input',ev=>setSync({pass:ev.target.value}));
   modal.querySelector('#m_syncnow').onclick=()=>pushSync();
   modal.querySelector('#m_pullnow').onclick=()=>{ if(confirm('replace everything on this device with the synced copy?')){ close(); pullSync(true,true); } };
@@ -1455,8 +1382,7 @@ grid.addEventListener('pointerup',e=>{
   else if(d.mode==='resizetop'){ en=d.e0; s=clamp(d.s0+d.dm,START,en-15); }
   else { s=clamp(d.s0+d.dm,START,END-dur); en=s+dur; }
   commit(d.kind,d.key,s,en,d.day+d.dc);
-  if(d.kind==='shared') saveShared(); else save();
-  render();
+  save(); render();
 });
 let dghost=null, sdrag=null, swallowClick=false;
 function dropSize(d){
@@ -1529,14 +1455,11 @@ function commit(kind,key,s,e,dayIdx){
     x.start=fromMin(s); x.end=fromMin(e); x.date=ds; }
   else if(kind==='meal'){ const x=S.meals.find(y=>y.id===key); if(!x) return;
     x.time=fromMin(s); x.dur=e-s; x.date=ds; }
-  else if(kind==='shared'){ const x=SH.events.find(y=>y.id===key); if(!x) return;
-    x.start=fromMin(s); x.end=fromMin(e); x.date=ds; x.u=Date.now(); }
 }
 function openItem(kind,key){
   if(kind==='event') mEvent(Object.assign({},S.events.find(x=>x.id===key)));
   else if(kind==='class') mClass(JSON.parse(JSON.stringify(cls(key.split('|')[0]))));
   else if(kind==='meal'){ const m=S.meals.find(x=>x.id===key); mMeal(m.date,m.slot); }
-  else if(kind==='shared'){ const x=SH.events.find(y=>y.id===key); if(x) mEvent(Object.assign({},x,{_shared:true})); }
 }
 
 /* ============ sample ============ */
@@ -1590,8 +1513,7 @@ fitHours();
 render();
 {
   const c=getSync();
-  if((c.token||c.pass)&&!c.who) setSync({who:'grace'});
-  renderOverlayBtn();
+  if(!c.who) setSync({who:'grace'});
   if(c.pass){ pullSync(); }
   else if(MOBILE) setTimeout(mSyncSheet,300);
   const maybePull=()=>{ if(!document.hidden&&getSync().pass&&Date.now()-lastPull>45000){ pullSync(); } };
