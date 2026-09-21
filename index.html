@@ -65,6 +65,13 @@ main{flex:1;display:flex;min-height:0}
 
 /* ---------- calendar ---------- */
 #cal{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);margin:14px 8px 14px 14px;border-radius:22px;border:2px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
+.cats{display:flex;gap:6px;padding:8px 10px 7px;border-bottom:2px solid var(--line)}
+.cats button{display:flex;align-items:center;gap:5px;font-size:11px;letter-spacing:.3px;padding:5px 10px 5px 8px;border-radius:999px;
+  border:2px solid var(--line);color:var(--ink-soft);background:var(--panel)}
+.cats button .ic{opacity:0;transition:opacity .12s}
+.cats button.on{background:var(--accent-soft);border-color:transparent;color:var(--ink)}
+.cats button.on .ic{opacity:1}
+body.mobile .cats{padding:6px 8px 5px;gap:5px} body.mobile .cats button{font-size:12px;flex:1;justify-content:center}
 .calhead{display:grid;grid-template-columns:var(--gutter) repeat(7,minmax(0,1fr));border-bottom:2px solid var(--line);padding-right:9px}
 .corner{border-right:1px solid var(--line)}
 .dh{padding:8px 6px 6px;border-right:1px solid var(--line);text-align:center;position:relative;min-width:0;overflow:hidden}
@@ -282,6 +289,11 @@ body.mobile .veil{padding:0;align-items:flex-end}
 
   <main>
     <section id="cal">
+      <div class="cats" id="cats">
+        <button data-cat="academic"><svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12.4l4.8 4.8L19.4 6.8"/></svg>academic</button>
+        <button data-cat="personal"><svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12.4l4.8 4.8L19.4 6.8"/></svg>personal</button>
+        <button data-cat="social"><svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 12.4l4.8 4.8L19.4 6.8"/></svg>social</button>
+      </div>
       <div class="calhead">
         <div class="corner"></div>
         <div class="dh" data-d="0"></div><div class="dh" data-d="1"></div><div class="dh" data-d="2"></div>
@@ -384,7 +396,7 @@ body.mobile .veil{padding:0;align-items:flex-end}
 <script>
 /* ============ mode ============ */
 const REPO='graceliu49/weekly-planner';
-const BUILD='1790008336';
+const BUILD='1790008360';
 const MOBILE=(typeof location!=='undefined'&&/[?&]m=1/.test(location.search))
   ||(typeof matchMedia==='function'&&matchMedia('(max-width:720px)').matches);
 if(MOBILE&&typeof document!=='undefined'&&document.body&&document.body.classList) document.body.classList.add('mobile');
@@ -461,6 +473,16 @@ function leftFor(a){ const est=(+a.est||0)*60; return est?Math.max(0,est-blocked
 /* ============ state ============ */
 const blank=()=>({classes:[],assignments:[],events:[],meals:[],todos:[],themes:[],palette:[],hidden:[],packages:[],shop:[],mealColors:{},term:{start:'',end:''}});
 let S, anchor=mondayOf(new Date()), asgnFilter='soon', pkgFilter='active', shopTab='wish';
+let cats={academic:true,personal:true,social:true};
+try{ cats=Object.assign(cats,JSON.parse(localStorage.getItem('gpCats')||'{}')); }catch(e){}
+function catOf(it){
+  if(it.kind==='class') return 'academic';
+  if(it.kind==='meal') return 'social';
+  const e=it.ref||{};
+  if(e.asgn) return 'academic';
+  if(e.type==='social'||e.type==='meal') return 'social';
+  return 'personal';
+}
 let RAW=null;
 try{ RAW=localStorage.getItem('gracePlanner'); S=Object.assign(blank(),JSON.parse(RAW||'{}')); }
 catch(e){ S=blank(); }
@@ -506,7 +528,7 @@ function dayItems(ds,dow){
   });
   S.meals.filter(m=>m.date===ds&&m.time).forEach(m=>out.push({kind:'meal',key:m.id,ref:m,
     title:m.who||m.slot,icon:m.slot==='lunch'?'bowl':'fork',sub:m.place||'',start:toMin(m.time),end:toMin(m.time)+(+m.dur||60),color:mealColor(m.slot,m)}));
-  return out;
+  return out.filter(it=>cats[catOf(it)]!==false);
 }
 function layout(items){
   // classes are a backdrop: always full width, never split the column.
@@ -609,7 +631,7 @@ function renderHead(){
   const tod=fmt(new Date());
   $$('.dh').forEach((el,i)=>{
     const d=days[i], ds=fmt(d);
-    const dues=S.assignments.filter(x=>x.due===ds).sort((x,y)=>(x.done?1:0)-(y.done?1:0));
+    const dues=cats.academic===false?[]:S.assignments.filter(x=>x.due===ds).sort((x,y)=>(x.done?1:0)-(y.done?1:0));
     const lunch=S.meals.find(m=>m.date===ds&&m.slot==='lunch');
     const dinner=S.meals.find(m=>m.date===ds&&m.slot==='dinner');
     const mchip=(m,slot,ik)=>m&&(m.who||m.place)
@@ -619,7 +641,7 @@ function renderHead(){
     el.innerHTML=`<div class="dow">${DOW[i]}</div><div class="dnum">${d.getDate()}</div>
       <div class="allday">
         ${dues.map(x=>`<button class="tag${x.done?' done':''}${x.star?' star':''}" data-asgn="${x.id}" style="background:${x.color};color:${ink(x.color)}" title="${esc(x.title)}${x.dueTime?' — due '+h12(x.dueTime):''}">${x.star?icoF('star',10):ico('flag',10)} ${esc(x.title)}</button>`).join('')}
-        <div class="mrow">${mchip(lunch,'lunch','bowl')}${mchip(dinner,'dinner','fork')}</div>
+        ${cats.social===false?'':`<div class="mrow">${mchip(lunch,'lunch','bowl')}${mchip(dinner,'dinner','fork')}</div>`}
       </div>`;
   });
 }
@@ -1225,6 +1247,9 @@ $$('.mtabs [data-page]').forEach(b=>b.onclick=()=>{ mpage=b.dataset.page; render
 $('#io').onclick=mMenu;
 $('#hidecls').onclick=()=>{ S.hideClasses=true; save(); applyHidden(); };
 $('#addpkg').onclick=()=>mPkg();
+function paintCats(){ $$('#cats [data-cat]').forEach(b=>b.classList.toggle('on',cats[b.dataset.cat]!==false)); }
+$$('#cats [data-cat]').forEach(b=>b.onclick=()=>{ cats[b.dataset.cat]=cats[b.dataset.cat]===false; try{ localStorage.setItem('gpCats',JSON.stringify(cats)); }catch(e){} paintCats(); render(); });
+paintCats();
 $('#addsocial').onclick=()=>mEvent({type:'social',color:TYPES.social.c,
   date:fmt(inWeek(new Date())?new Date():anchor),start:'18:00',end:'20:00'});
 const lastSolid=()=>S.events.filter(e=>e.type==='solidcore')
